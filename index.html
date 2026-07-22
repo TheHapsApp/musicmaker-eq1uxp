@@ -50,6 +50,32 @@
       gap: 10px;
       margin-bottom: 22px;
     }
+
+    /* ---- Instrument picker ---- */
+    .instrument-section { max-width: 700px; margin: 0 auto 22px; }
+    .instrument-title {
+      font-size: clamp(1rem, 4vw, 1.2rem);
+      margin-bottom: 10px;
+      text-shadow: 2px 2px 0 rgba(0,0,0,0.2);
+    }
+    .instrument-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+    }
+    .instrument-btn {
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: bold;
+      color: #fff;
+      background: rgba(255,255,255,0.16);
+      border: 2px solid #fff;
+      border-radius: 999px;
+      padding: 7px 12px;
+      cursor: pointer;
+    }
+    .instrument-btn.active { background: rgba(255,255,255,0.55); color: #1a2a5a; }
     .ctrl-btn {
       font-family: inherit;
       font-size: 1rem;
@@ -378,11 +404,27 @@
       <button class="speed-btn active" data-vol="1">🔉 Normal</button>
       <button class="speed-btn" data-vol="1.6">🔊 Loud</button>
     </div>
-    <div class="speed-row" id="instrumentRow">
-      <button class="speed-btn active" data-instrument="sine">🔔 Bell</button>
-      <button class="speed-btn" data-instrument="triangle">〰️ Soft</button>
-      <button class="speed-btn" data-instrument="sawtooth">🎸 Buzzy</button>
-      <button class="speed-btn" data-instrument="square">🎮 8-Bit</button>
+  </div>
+
+  <div class="instrument-section">
+    <div class="instrument-title">🎼 Instrument</div>
+    <div class="instrument-row" id="instrumentRow">
+      <button class="instrument-btn active" data-instrument="sine">🔔 Bell</button>
+      <button class="instrument-btn" data-instrument="triangle">〰️ Soft</button>
+      <button class="instrument-btn" data-instrument="sawtooth">🔊 Buzzy</button>
+      <button class="instrument-btn" data-instrument="square">🎮 8-Bit</button>
+      <button class="instrument-btn" data-instrument="guitar">🎸 Electric Guitar</button>
+      <button class="instrument-btn" data-instrument="cello">🎻 Cello</button>
+      <button class="instrument-btn" data-instrument="violin">🎻 Violin</button>
+      <button class="instrument-btn" data-instrument="viola">🎻 Viola</button>
+      <button class="instrument-btn" data-instrument="piano">🎹 Piano</button>
+      <button class="instrument-btn" data-instrument="sax">🎷 Saxophone</button>
+      <button class="instrument-btn" data-instrument="harmonica">🪗 Harmonica</button>
+      <button class="instrument-btn" data-instrument="flute">🪈 Flute</button>
+      <button class="instrument-btn" data-instrument="doublebass">🎻 Double Bass</button>
+      <button class="instrument-btn" data-instrument="ebass">🎸 Electric Bass</button>
+      <button class="instrument-btn" data-instrument="epiano">🎹 Electric Piano</button>
+      <button class="instrument-btn" data-instrument="drums">🥁 Drums</button>
     </div>
   </div>
 
@@ -671,18 +713,122 @@
 
     renderPartTabs();
 
+    // Every instrument is built from simple oscillator waveforms — this is a fun
+    // stylized approximation of each instrument's character, not a real recording.
+    // attack/hold describe the volume envelope; filterMult (if set) darkens or
+    // brightens the tone relative to the note's own pitch.
+    var INSTRUMENT_RECIPES = {
+      sine:     { layers: [{ type: "sine",     gain: 1 }], attack: 0.005, hold: 0.55 },
+      triangle: { layers: [{ type: "triangle", gain: 1 }], attack: 0.005, hold: 0.6 },
+      sawtooth: { layers: [{ type: "sawtooth", gain: 1 }], attack: 0.005, hold: 0.5 },
+      square:   { layers: [{ type: "square",   gain: 1 }], attack: 0.005, hold: 0.35 },
+
+      guitar: {
+        layers: [{ type: "sawtooth", gain: 0.8 }, { type: "sawtooth", gain: 0.5, detune: 9 }],
+        attack: 0.004, hold: 0.35, filterMult: 3.5
+      },
+      cello:      { layers: [{ type: "sawtooth", gain: 1 }], attack: 0.07, hold: 0.85, filterMult: 2 },
+      violin:     { layers: [{ type: "sawtooth", gain: 1 }], attack: 0.04, hold: 0.85, filterMult: 5.5 },
+      viola:      { layers: [{ type: "sawtooth", gain: 1 }], attack: 0.05, hold: 0.85, filterMult: 3.5 },
+      piano: {
+        layers: [{ type: "triangle", gain: 1 }, { type: "sine", freqMult: 2, gain: 0.15 }],
+        attack: 0.003, hold: 0.5
+      },
+      sax:        { layers: [{ type: "sawtooth", gain: 1 }], attack: 0.07, hold: 0.8, filterMult: 4.5 },
+      harmonica: {
+        layers: [{ type: "square", gain: 0.6 }, { type: "sawtooth", gain: 0.6 }],
+        attack: 0.05, hold: 0.8, filterMult: 3
+      },
+      flute: {
+        layers: [{ type: "sine", gain: 1 }, { type: "sine", freqMult: 2, gain: 0.08 }],
+        attack: 0.08, hold: 0.85
+      },
+      doublebass: { layers: [{ type: "sawtooth", gain: 1 }], attack: 0.05, hold: 0.85, filterMult: 1.6 },
+      ebass:      { layers: [{ type: "sawtooth", gain: 1 }], attack: 0.004, hold: 0.4, filterMult: 2 },
+      epiano: {
+        layers: [{ type: "sine", gain: 0.8 }, { type: "triangle", gain: 0.5 }],
+        attack: 0.004, hold: 0.55, filterMult: 4
+      },
+      drums: { noise: true }
+    };
+
     var audioCtx = null;
+    var drumNoiseBuffer = null;
+
+    function getDrumNoiseBuffer() {
+      if (!drumNoiseBuffer) {
+        var size = audioCtx.sampleRate * 0.3;
+        drumNoiseBuffer = audioCtx.createBuffer(1, size, audioCtx.sampleRate);
+        var data = drumNoiseBuffer.getChannelData(0);
+        for (var i = 0; i < size; i++) data[i] = Math.random() * 2 - 1;
+      }
+      return drumNoiseBuffer;
+    }
+
+    function playDrumHit(freq, duration, peak, now) {
+      var noise = audioCtx.createBufferSource();
+      noise.buffer = getDrumNoiseBuffer();
+
+      var filter = audioCtx.createBiquadFilter();
+      filter.type = "bandpass";
+      // Low notes on the chart thud like a kick; high notes sizzle like a hi-hat.
+      filter.frequency.value = Math.max(70, Math.min(80 + (freq - 261.63) * 3, 8000));
+      filter.Q.value = 0.9;
+
+      var g = audioCtx.createGain();
+      var hitLength = Math.min(duration, 0.22);
+      g.gain.setValueAtTime(peak * 1.4, now);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + hitLength);
+
+      noise.connect(filter);
+      filter.connect(g);
+      g.connect(audioCtx.destination);
+      noise.start(now);
+      noise.stop(now + hitLength + 0.05);
+    }
+
     function playTone(freq, duration, gain) {
       try {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        var o = audioCtx.createOscillator(), g = audioCtx.createGain();
-        o.type = currentInstrument;
-        o.frequency.value = freq;
-        g.gain.value = typeof gain === "number" ? gain : 0.2;
-        o.connect(g); g.connect(audioCtx.destination);
-        o.start();
-        g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-        o.stop(audioCtx.currentTime + duration);
+        var recipe = INSTRUMENT_RECIPES[currentInstrument] || INSTRUMENT_RECIPES.sine;
+        var peak = typeof gain === "number" ? gain : 0.2;
+        var now = audioCtx.currentTime;
+
+        if (recipe.noise) {
+          playDrumHit(freq, duration, peak, now);
+          return;
+        }
+
+        var master = audioCtx.createGain();
+        var attack = Math.min(recipe.attack, duration * 0.4);
+        master.gain.setValueAtTime(0.0001, now);
+        master.gain.linearRampToValueAtTime(peak, now + attack);
+        master.gain.setValueAtTime(peak, now + Math.max(attack, duration * recipe.hold));
+        master.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+        if (recipe.filterMult) {
+          var filter = audioCtx.createBiquadFilter();
+          filter.type = "lowpass";
+          filter.frequency.value = Math.min(freq * recipe.filterMult, 16000);
+          filter.Q.value = 0.7;
+          master.connect(filter);
+          filter.connect(audioCtx.destination);
+        } else {
+          master.connect(audioCtx.destination);
+        }
+
+        recipe.layers.forEach(function (layer) {
+          var o = audioCtx.createOscillator();
+          var lg = audioCtx.createGain();
+          o.type = layer.type;
+          o.frequency.value = freq * (layer.freqMult || 1);
+          if (layer.detune) o.detune.value = layer.detune;
+          lg.gain.value = layer.gain;
+          o.connect(lg);
+          lg.connect(master);
+          o.start(now);
+          o.stop(now + duration + 0.05);
+        });
       } catch (e) {}
     }
 
@@ -766,7 +912,7 @@
       });
 
       currentInstrument = "sine";
-      document.querySelectorAll("#instrumentRow .speed-btn").forEach(function (b) {
+      document.querySelectorAll("#instrumentRow .instrument-btn").forEach(function (b) {
         b.classList.toggle("active", b.getAttribute("data-instrument") === currentInstrument);
       });
 
@@ -797,9 +943,9 @@
     });
 
     var currentInstrument = "sine";
-    document.querySelectorAll("#instrumentRow .speed-btn").forEach(function (btn) {
+    document.querySelectorAll("#instrumentRow .instrument-btn").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        document.querySelectorAll("#instrumentRow .speed-btn").forEach(function (b) { b.classList.remove("active"); });
+        document.querySelectorAll("#instrumentRow .instrument-btn").forEach(function (b) { b.classList.remove("active"); });
         btn.classList.add("active");
         currentInstrument = btn.getAttribute("data-instrument");
       });
@@ -880,7 +1026,7 @@
       });
 
       currentInstrument = song.instrument || "sine";
-      document.querySelectorAll("#instrumentRow .speed-btn").forEach(function (b) {
+      document.querySelectorAll("#instrumentRow .instrument-btn").forEach(function (b) {
         b.classList.toggle("active", b.getAttribute("data-instrument") === currentInstrument);
       });
     }
