@@ -174,6 +174,98 @@
       cursor: pointer;
     }
     .tip-next-btn:active { transform: translateY(2px); }
+
+    /* ---- My Songs list ---- */
+    .songs-section { max-width: 700px; margin: 0 auto 26px; }
+    .songs-title {
+      font-size: clamp(1.1rem, 4.5vw, 1.4rem);
+      margin-bottom: 12px;
+      text-shadow: 2px 2px 0 rgba(0,0,0,0.2);
+    }
+    .songs-empty { font-size: 0.95rem; opacity: 0.85; margin-bottom: 10px; }
+    .songs-grid {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+    }
+    .song-card {
+      position: relative;
+      background: rgba(255,255,255,0.2);
+      border: 3px solid #fff;
+      border-radius: 16px;
+      padding: 12px 16px;
+      cursor: pointer;
+      min-width: 120px;
+    }
+    .song-card:active { transform: translateY(2px); }
+    .song-card.active { background: rgba(255,255,255,0.5); color: #1a2a5a; }
+    .song-card .song-name { font-weight: bold; font-size: 0.95rem; padding-right: 18px; }
+    .song-card .song-delete {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #ff3b3b;
+      color: #fff;
+      border: 2px solid #fff;
+      font-size: 0.7rem;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    /* ---- Name-your-song modal ---- */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-card {
+      background: rgba(120,70,160,0.92);
+      border: 4px solid #fff;
+      border-radius: 26px;
+      padding: 26px 24px;
+      max-width: 320px;
+      width: 100%;
+      box-shadow: 0 8px 0 rgba(0,0,0,0.25);
+    }
+    .modal-title { font-size: 1.15rem; font-weight: bold; margin-bottom: 14px; }
+    .modal-input {
+      width: 100%;
+      font-family: inherit;
+      font-size: 1.1rem;
+      text-align: center;
+      color: #333;
+      background: #fff;
+      border: 4px solid #fff;
+      border-radius: 14px;
+      padding: 10px;
+    }
+    .modal-btns { display: flex; gap: 12px; margin-top: 18px; }
+    .modal-btn {
+      flex: 1;
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: bold;
+      color: #fff;
+      border: 3px solid #fff;
+      border-radius: 999px;
+      padding: 12px 10px;
+      cursor: pointer;
+    }
+    .modal-btn.confirm { background: rgba(74,222,128,0.5); }
+    .modal-btn.cancel { background: rgba(255,255,255,0.15); }
   </style>
 </head>
 <body>
@@ -195,6 +287,23 @@
 
   <div class="chart-wrap">
     <div class="chart" id="chart"></div>
+  </div>
+
+  <div class="songs-section">
+    <div class="songs-title">🎼 My Songs</div>
+    <div class="songs-empty" id="songsEmpty">You haven't saved any songs yet!</div>
+    <div class="songs-grid" id="songsGrid"></div>
+  </div>
+
+  <div class="modal-overlay" id="nameModalOverlay">
+    <div class="modal-card">
+      <div class="modal-title">🎵 Name your song!</div>
+      <input class="modal-input" id="nameModalInput" type="text" maxlength="30">
+      <div class="modal-btns">
+        <button class="modal-btn confirm" id="nameModalSaveBtn">💾 Save</button>
+        <button class="modal-btn cancel" id="nameModalCancelBtn">✖️ Cancel</button>
+      </div>
+    </div>
   </div>
 
   <div class="tips-card">
@@ -342,9 +451,11 @@
       });
     });
 
-    var SAVE_KEY = "bensMusicMakerSong";
+    var SONGS_KEY = "bensMusicMakerSongs";
+    var OLD_SINGLE_SONG_KEY = "bensMusicMakerSong"; // from the old one-song-only version
     var saveStatus = document.getElementById("saveStatus");
     var saveStatusTimer = null;
+    var currentSongId = null;
 
     function showStatus(msg) {
       saveStatus.textContent = msg;
@@ -353,44 +464,135 @@
       saveStatusTimer = setTimeout(function () { saveStatus.classList.remove("show"); }, 2200);
     }
 
-    function saveSong() {
-      var data = { grid: grid, msPerStep: msPerStep };
+    function loadAllSongs() {
+      var raw;
+      try { raw = localStorage.getItem(SONGS_KEY); } catch (e) { return []; }
+      if (!raw) return [];
       try {
-        localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-        showStatus("💾 Saved! Come back anytime to hear it again.");
-      } catch (e) {
-        showStatus("Couldn't save right now — try again!");
-      }
+        var songs = JSON.parse(raw);
+        return Array.isArray(songs) ? songs : [];
+      } catch (e) { return []; }
     }
 
-    function loadSavedSong() {
-      var raw;
-      try { raw = localStorage.getItem(SAVE_KEY); } catch (e) { return; }
-      if (!raw) return;
-      var data;
-      try { data = JSON.parse(raw); } catch (e) { return; }
-      if (!data || !data.grid) return;
+    function saveAllSongs(songs) {
+      try { localStorage.setItem(SONGS_KEY, JSON.stringify(songs)); } catch (e) {}
+    }
 
+    // Bring forward a song saved by the old single-song version, if any.
+    function migrateOldSingleSong() {
+      var raw;
+      try { raw = localStorage.getItem(OLD_SINGLE_SONG_KEY); } catch (e) { return; }
+      if (!raw) return;
+      try {
+        var old = JSON.parse(raw);
+        if (old && old.grid) {
+          var songs = loadAllSongs();
+          songs.push({ id: 1, name: "My First Song", grid: old.grid, msPerStep: old.msPerStep || 250 });
+          saveAllSongs(songs);
+        }
+      } catch (e) {}
+      try { localStorage.removeItem(OLD_SINGLE_SONG_KEY); } catch (e) {}
+    }
+
+    function applySongToChart(song) {
       for (var row = 0; row < NOTES.length; row++) {
         for (var step = 0; step < STEPS; step++) {
-          var on = !!(data.grid[row] && data.grid[row][step]);
+          var on = !!(song.grid[row] && song.grid[row][step]);
           grid[row][step] = on;
           cellButtons[row][step].classList.toggle("active", on);
         }
       }
-
-      if (data.msPerStep) {
-        msPerStep = data.msPerStep;
+      if (song.msPerStep) {
+        msPerStep = song.msPerStep;
         document.querySelectorAll(".speed-btn").forEach(function (b) {
           b.classList.toggle("active", parseInt(b.getAttribute("data-speed"), 10) === msPerStep);
         });
       }
-
-      showStatus("🎶 Loaded your saved song!");
     }
 
-    document.getElementById("saveBtn").addEventListener("click", saveSong);
-    loadSavedSong();
+    function renderSongList() {
+      var songs = loadAllSongs();
+      var grid2 = document.getElementById("songsGrid");
+      var empty = document.getElementById("songsEmpty");
+      grid2.innerHTML = "";
+      empty.style.display = songs.length ? "none" : "block";
+
+      songs.forEach(function (song) {
+        var card = document.createElement("div");
+        card.className = "song-card" + (song.id === currentSongId ? " active" : "");
+
+        var nameEl = document.createElement("div");
+        nameEl.className = "song-name";
+        nameEl.textContent = "🎵 " + song.name;
+        card.appendChild(nameEl);
+
+        var delBtn = document.createElement("div");
+        delBtn.className = "song-delete";
+        delBtn.textContent = "✖";
+        delBtn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          var remaining = loadAllSongs().filter(function (s) { return s.id !== song.id; });
+          saveAllSongs(remaining);
+          if (currentSongId === song.id) currentSongId = null;
+          renderSongList();
+        });
+        card.appendChild(delBtn);
+
+        card.addEventListener("click", function () {
+          stopPlaying();
+          applySongToChart(song);
+          currentSongId = song.id;
+          renderSongList();
+          showStatus("🎶 Loaded \"" + song.name + "\"!");
+        });
+
+        grid2.appendChild(card);
+      });
+    }
+
+    var nameModalOverlay = document.getElementById("nameModalOverlay");
+    var nameModalInput = document.getElementById("nameModalInput");
+
+    function openNameModal() {
+      var count = loadAllSongs().length;
+      nameModalInput.value = "Song " + (count + 1);
+      nameModalOverlay.classList.add("show");
+      setTimeout(function () { nameModalInput.focus(); nameModalInput.select(); }, 50);
+    }
+
+    function closeNameModal() {
+      nameModalOverlay.classList.remove("show");
+    }
+
+    function confirmSaveSong() {
+      var name = nameModalInput.value.trim() || ("Song " + (loadAllSongs().length + 1));
+      var songs = loadAllSongs();
+      var newSong = {
+        id: Date.now(),
+        name: name,
+        grid: grid.map(function (row) { return row.slice(); }),
+        msPerStep: msPerStep
+      };
+      songs.push(newSong);
+      saveAllSongs(songs);
+      currentSongId = newSong.id;
+      renderSongList();
+      closeNameModal();
+      showStatus("💾 Saved \"" + name + "\"!");
+    }
+
+    document.getElementById("saveBtn").addEventListener("click", openNameModal);
+    document.getElementById("nameModalSaveBtn").addEventListener("click", confirmSaveSong);
+    document.getElementById("nameModalCancelBtn").addEventListener("click", closeNameModal);
+    nameModalOverlay.addEventListener("click", function (e) {
+      if (e.target === nameModalOverlay) closeNameModal();
+    });
+    nameModalInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); confirmSaveSong(); }
+    });
+
+    migrateOldSingleSong();
+    renderSongList();
 
     var tipIndex = -1;
     document.getElementById("tipNextBtn").addEventListener("click", function () {
