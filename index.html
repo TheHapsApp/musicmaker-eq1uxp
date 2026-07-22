@@ -494,16 +494,16 @@
         var btn = document.createElement("button");
         btn.className = "step-btn";
 
+        btn.dataset.row = row;
+        btn.dataset.step = step;
+
         (function (row, step, btn) {
-          btn.addEventListener("mousedown", function () { startHold(row, step); });
-          btn.addEventListener("touchstart", function () { startHold(row, step); }, { passive: true });
-          btn.addEventListener("mouseup", cancelHold);
-          btn.addEventListener("mouseleave", cancelHold);
-          btn.addEventListener("touchend", cancelHold);
-          btn.addEventListener("touchcancel", cancelHold);
+          btn.addEventListener("mousedown", function () { beginDrag(row, step); });
+          btn.addEventListener("touchstart", function () { beginDrag(row, step); }, { passive: true });
 
           btn.addEventListener("click", function () {
             if (holdTriggered) { holdTriggered = false; return; } // the hold already opened the volume picker
+            if (dragOccurred) { dragOccurred = false; return; } // dragging already painted this cell
             var level = grid[row][step] ? 0 : DEFAULT_VOLUME_LEVEL;
             grid[row][step] = level;
             btn.classList.toggle("active", level > 0);
@@ -545,6 +545,72 @@
     function cancelHold() {
       clearTimeout(holdTimer);
     }
+
+    // Press and drag across the chart to paint (or erase) a whole run of notes at once.
+    var isDragging = false;
+    var dragMode = null; // "add" or "remove", decided by the very first cell touched
+    var dragOrigin = null;
+    var dragLastCell = null;
+    var dragPaintedOrigin = false;
+    var dragOccurred = false;
+
+    function beginDrag(row, step) {
+      startHold(row, step); // holding still still opens the volume picker
+      isDragging = true;
+      dragMode = grid[row][step] ? "remove" : "add";
+      dragOrigin = { row: row, step: step };
+      dragLastCell = { row: row, step: step };
+      dragPaintedOrigin = false;
+    }
+
+    function applyDragPaint(row, step) {
+      var level = dragMode === "add" ? DEFAULT_VOLUME_LEVEL : 0;
+      grid[row][step] = level;
+      var btn = cellButtons[row][step];
+      btn.classList.toggle("active", level > 0);
+      updateVolClass(btn, level);
+      if (level > 0) playTone(NOTES[row].freq, 0.12, VOLUME_LEVELS[level - 1].gain * masterVolumeMult);
+    }
+
+    function handlePointerMove(clientX, clientY) {
+      if (!isDragging) return;
+      var el = document.elementFromPoint(clientX, clientY);
+      if (!el || !el.classList.contains("step-btn")) return;
+      var row = parseInt(el.dataset.row, 10);
+      var step = parseInt(el.dataset.step, 10);
+      if (dragLastCell && dragLastCell.row === row && dragLastCell.step === step) return;
+
+      cancelHold(); // we're dragging now, not holding still
+
+      if (!dragPaintedOrigin) {
+        applyDragPaint(dragOrigin.row, dragOrigin.step);
+        dragPaintedOrigin = true;
+        dragOccurred = true;
+      }
+      applyDragPaint(row, step);
+      dragLastCell = { row: row, step: step };
+    }
+
+    function endDrag() {
+      isDragging = false;
+      dragMode = null;
+      dragOrigin = null;
+      dragLastCell = null;
+      cancelHold();
+      // Defer clearing this so a "click" firing right after mouseup (when the
+      // drag ends back on its starting cell) still sees it and skips its toggle.
+      setTimeout(function () { dragOccurred = false; }, 0);
+    }
+
+    document.addEventListener("mousemove", function (e) { handlePointerMove(e.clientX, e.clientY); });
+    document.addEventListener("touchmove", function (e) {
+      if (!isDragging || !e.touches || !e.touches[0]) return;
+      e.preventDefault();
+      handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: false });
+    document.addEventListener("mouseup", endDrag);
+    document.addEventListener("touchend", endDrag);
+    document.addEventListener("touchcancel", endDrag);
 
     var partsRow = document.getElementById("partsRow");
 
