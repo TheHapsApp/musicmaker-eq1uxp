@@ -183,6 +183,11 @@
     .step-btn.active { border-color: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.6); }
     .step-btn.playhead { outline: 3px solid #fff; outline-offset: 1px; }
 
+    /* Hold a note to pick how loud it is — dimmer for soft, brighter/bigger glow for loud */
+    .step-btn.active.vol-1 { opacity: 0.55; box-shadow: none; }
+    .step-btn.active.vol-2 { opacity: 0.85; }
+    .step-btn.active.vol-3 { opacity: 1; box-shadow: 0 0 10px rgba(255,255,255,0.95); transform: scale(1.08); }
+
     /* Color-code each note letter, consistent top-to-bottom */
     .note-C .step-btn.active { background: var(--p1); }
     .note-D .step-btn.active { background: var(--p2); }
@@ -335,11 +340,28 @@
     }
     .modal-btn.confirm { background: rgba(74,222,128,0.5); }
     .modal-btn.cancel { background: rgba(255,255,255,0.15); }
+
+    /* ---- Note volume modal (hold a note to open) ---- */
+    .volume-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+    .volume-btn {
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: bold;
+      color: #fff;
+      background: rgba(255,255,255,0.18);
+      border: 3px solid #fff;
+      border-radius: 999px;
+      padding: 12px 10px;
+      cursor: pointer;
+    }
+    .volume-btn:active { transform: translateY(2px); }
+    .volume-btn.current { border-width: 5px; background: rgba(255,255,255,0.4); }
+    .volume-btn.off { background: rgba(255,59,59,0.3); margin-top: 4px; }
   </style>
 </head>
 <body>
   <h1>🎵 Ben's Music Maker 🎵</h1>
-  <p class="sub">Tap boxes to add notes, then hit Play!</p>
+  <p class="sub">Tap boxes to add notes (hold one to pick its volume!), then hit Play!</p>
 
   <div class="controls">
     <button class="ctrl-btn play" id="playBtn">▶️ Play</button>
@@ -378,6 +400,18 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="volumeModalOverlay">
+    <div class="modal-card">
+      <div class="modal-title">🎚️ Pick a Volume</div>
+      <div class="volume-btns">
+        <button class="volume-btn" data-level="3">🔊 Loud</button>
+        <button class="volume-btn" data-level="2">🔉 Medium</button>
+        <button class="volume-btn" data-level="1">🔈 Soft</button>
+        <button class="volume-btn off" data-level="0">🔇 Turn Off</button>
+      </div>
+    </div>
+  </div>
+
   <div class="tips-card">
     <div class="tips-title">💡 Music Tip</div>
     <div class="tip-text" id="tipText">Tap "Next Tip" for an idea!</div>
@@ -411,11 +445,25 @@
       "⏱️ Try changing the speed to make your song feel different!",
       "🔁 Loop your favorite part and listen to it a few times in a row!",
       "🎤 Once you like your song, give it a name in your head!",
-      "🧩 Add a new part to build a longer song, like a verse and a chorus!"
+      "🧩 Add a new part to build a longer song, like a verse and a chorus!",
+      "🎚️ Hold down a note to pick how soft or loud it plays!"
     ];
 
     function makeEmptyGrid() {
-      return NOTES.map(function () { return new Array(STEPS).fill(false); });
+      return NOTES.map(function () { return new Array(STEPS).fill(0); });
+    }
+
+    // A cell's value is 0 (off) or 1/2/3 for how loud that note plays.
+    var VOLUME_LEVELS = [
+      { gain: 0.08 }, // 1 = Soft
+      { gain: 0.2 },  // 2 = Medium
+      { gain: 0.4 }   // 3 = Loud
+    ];
+    var DEFAULT_VOLUME_LEVEL = 2; // what a quick tap turns a note on at
+
+    function updateVolClass(btn, level) {
+      btn.classList.remove("vol-1", "vol-2", "vol-3");
+      if (level > 0) btn.classList.add("vol-" + level);
     }
 
     // A song is made of one or more "parts" — each its own 16-step grid.
@@ -440,13 +488,25 @@
       for (var step = 0; step < STEPS; step++) {
         var btn = document.createElement("button");
         btn.className = "step-btn";
-        btn.addEventListener("click", (function (row, step, btn) {
-          return function () {
-            grid[row][step] = !grid[row][step];
-            btn.classList.toggle("active", grid[row][step]);
-            if (grid[row][step]) playTone(NOTES[row].freq, 0.2);
-          };
-        })(row, step, btn));
+
+        (function (row, step, btn) {
+          btn.addEventListener("mousedown", function () { startHold(row, step); });
+          btn.addEventListener("touchstart", function () { startHold(row, step); }, { passive: true });
+          btn.addEventListener("mouseup", cancelHold);
+          btn.addEventListener("mouseleave", cancelHold);
+          btn.addEventListener("touchend", cancelHold);
+          btn.addEventListener("touchcancel", cancelHold);
+
+          btn.addEventListener("click", function () {
+            if (holdTriggered) { holdTriggered = false; return; } // the hold already opened the volume picker
+            var level = grid[row][step] ? 0 : DEFAULT_VOLUME_LEVEL;
+            grid[row][step] = level;
+            btn.classList.toggle("active", level > 0);
+            updateVolClass(btn, level);
+            if (level > 0) playTone(NOTES[row].freq, 0.2, VOLUME_LEVELS[level - 1].gain);
+          });
+        })(row, step, btn);
+
         rowEl.appendChild(btn);
         rowButtons.push(btn);
       }
@@ -458,9 +518,27 @@
     function renderChartFromGrid() {
       for (var row = 0; row < NOTES.length; row++) {
         for (var step = 0; step < STEPS; step++) {
-          cellButtons[row][step].classList.toggle("active", !!grid[row][step]);
+          var level = grid[row][step];
+          cellButtons[row][step].classList.toggle("active", level > 0);
+          updateVolClass(cellButtons[row][step], level);
         }
       }
+    }
+
+    var holdTimer = null;
+    var holdTriggered = false;
+
+    function startHold(row, step) {
+      clearTimeout(holdTimer);
+      holdTriggered = false;
+      holdTimer = setTimeout(function () {
+        holdTriggered = true;
+        openVolumeModal(row, step);
+      }, 380);
+    }
+
+    function cancelHold() {
+      clearTimeout(holdTimer);
     }
 
     var partsRow = document.getElementById("partsRow");
@@ -516,13 +594,13 @@
     renderPartTabs();
 
     var audioCtx = null;
-    function playTone(freq, duration) {
+    function playTone(freq, duration, gain) {
       try {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         var o = audioCtx.createOscillator(), g = audioCtx.createGain();
         o.type = "sine";
         o.frequency.value = freq;
-        g.gain.value = 0.2;
+        g.gain.value = typeof gain === "number" ? gain : 0.2;
         o.connect(g); g.connect(audioCtx.destination);
         o.start();
         g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
@@ -554,7 +632,8 @@
       }
       for (var row = 0; row < NOTES.length; row++) {
         cellButtons[row][currentStep].classList.add("playhead");
-        if (grid[row][currentStep]) playTone(NOTES[row].freq, 0.35);
+        var level = grid[row][currentStep];
+        if (level > 0) playTone(NOTES[row].freq, 0.35, VOLUME_LEVELS[level - 1].gain);
       }
     }
 
@@ -581,9 +660,12 @@
 
     document.getElementById("clearBtn").addEventListener("click", function () {
       stopPlaying();
-      grid.forEach(function (row) { row.fill(false); });
+      grid.forEach(function (row) { row.fill(0); });
       cellButtons.forEach(function (rowButtons) {
-        rowButtons.forEach(function (btn) { btn.classList.remove("active"); });
+        rowButtons.forEach(function (btn) {
+          btn.classList.remove("active");
+          updateVolClass(btn, 0);
+        });
       });
     });
 
@@ -662,10 +744,17 @@
 
     function applySongToChart(song) {
       // New songs store `parts` (an array of grids). Older saved songs only
-      // have a single `grid` — treat that as a one-part song.
+      // have a single `grid` — treat that as a one-part song. Even older
+      // songs stored `true`/`false` instead of a volume level (1/2/3) —
+      // bring those forward as medium volume.
       var loadedParts = song.parts && song.parts.length ? song.parts : [song.grid];
       parts = loadedParts.map(function (part) {
-        return part.map(function (row) { return row.slice(); });
+        return part.map(function (row) {
+          return row.map(function (cell) {
+            if (cell === true) return DEFAULT_VOLUME_LEVEL;
+            return typeof cell === "number" ? cell : 0;
+          });
+        });
       });
       currentPartIndex = 0;
       grid = parts[currentPartIndex];
@@ -728,6 +817,43 @@
         grid2.appendChild(card);
       });
     }
+
+    var volumeModalOverlay = document.getElementById("volumeModalOverlay");
+    var volumeTargetRow = null;
+    var volumeTargetStep = null;
+
+    function openVolumeModal(row, step) {
+      volumeTargetRow = row;
+      volumeTargetStep = step;
+      var current = grid[row][step];
+      document.querySelectorAll(".volume-btn").forEach(function (b) {
+        b.classList.toggle("current", parseInt(b.getAttribute("data-level"), 10) === current);
+      });
+      volumeModalOverlay.classList.add("show");
+    }
+
+    function closeVolumeModal() {
+      volumeModalOverlay.classList.remove("show");
+      volumeTargetRow = null;
+      volumeTargetStep = null;
+    }
+
+    document.querySelectorAll(".volume-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (volumeTargetRow === null) return;
+        var level = parseInt(btn.getAttribute("data-level"), 10);
+        grid[volumeTargetRow][volumeTargetStep] = level;
+        var cellBtn = cellButtons[volumeTargetRow][volumeTargetStep];
+        cellBtn.classList.toggle("active", level > 0);
+        updateVolClass(cellBtn, level);
+        if (level > 0) playTone(NOTES[volumeTargetRow].freq, 0.25, VOLUME_LEVELS[level - 1].gain);
+        closeVolumeModal();
+      });
+    });
+
+    volumeModalOverlay.addEventListener("click", function (e) {
+      if (e.target === volumeModalOverlay) closeVolumeModal();
+    });
 
     var nameModalOverlay = document.getElementById("nameModalOverlay");
     var nameModalInput = document.getElementById("nameModalInput");
