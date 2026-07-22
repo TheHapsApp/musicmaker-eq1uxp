@@ -343,6 +343,7 @@
 
   <div class="controls">
     <button class="ctrl-btn play" id="playBtn">▶️ Play</button>
+    <button class="ctrl-btn" id="newSongBtn">🆕 New Song</button>
     <button class="ctrl-btn" id="saveBtn">💾 Save</button>
     <button class="ctrl-btn" id="clearBtn">🔄 Clear</button>
     <div class="speed-row">
@@ -584,6 +585,24 @@
       cellButtons.forEach(function (rowButtons) {
         rowButtons.forEach(function (btn) { btn.classList.remove("active"); });
       });
+    });
+
+    document.getElementById("newSongBtn").addEventListener("click", function () {
+      stopPlaying();
+      parts = [makeEmptyGrid()];
+      currentPartIndex = 0;
+      grid = parts[currentPartIndex];
+      renderChartFromGrid();
+      renderPartTabs();
+
+      msPerStep = 250;
+      document.querySelectorAll(".speed-btn").forEach(function (b) {
+        b.classList.toggle("active", parseInt(b.getAttribute("data-speed"), 10) === msPerStep);
+      });
+
+      currentSongId = null;
+      renderSongList();
+      showStatus("🆕 Started a new song — build it, then hit Save!");
     });
 
     document.querySelectorAll(".speed-btn").forEach(function (btn) {
