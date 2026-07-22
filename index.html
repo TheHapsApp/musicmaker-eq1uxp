@@ -378,6 +378,12 @@
       <button class="speed-btn active" data-vol="1">🔉 Normal</button>
       <button class="speed-btn" data-vol="1.6">🔊 Loud</button>
     </div>
+    <div class="speed-row" id="instrumentRow">
+      <button class="speed-btn active" data-instrument="sine">🔔 Bell</button>
+      <button class="speed-btn" data-instrument="triangle">〰️ Soft</button>
+      <button class="speed-btn" data-instrument="sawtooth">🎸 Buzzy</button>
+      <button class="speed-btn" data-instrument="square">🎮 8-Bit</button>
+    </div>
   </div>
 
   <div class="save-status" id="saveStatus"></div>
@@ -451,7 +457,8 @@
       "🔁 Loop your favorite part and listen to it a few times in a row!",
       "🎤 Once you like your song, give it a name in your head!",
       "🧩 Add a new part to build a longer song, like a verse and a chorus!",
-      "🎚️ Hold down a note to pick how soft or loud it plays!"
+      "🎚️ Hold down a note to pick how soft or loud it plays!",
+      "🎮 Try a different instrument sound to totally change the feel of your song!"
     ];
 
     function makeEmptyGrid() {
@@ -669,7 +676,7 @@
       try {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         var o = audioCtx.createOscillator(), g = audioCtx.createGain();
-        o.type = "sine";
+        o.type = currentInstrument;
         o.frequency.value = freq;
         g.gain.value = typeof gain === "number" ? gain : 0.2;
         o.connect(g); g.connect(audioCtx.destination);
@@ -758,6 +765,11 @@
         b.classList.toggle("active", parseFloat(b.getAttribute("data-vol")) === masterVolumeMult);
       });
 
+      currentInstrument = "sine";
+      document.querySelectorAll("#instrumentRow .speed-btn").forEach(function (b) {
+        b.classList.toggle("active", b.getAttribute("data-instrument") === currentInstrument);
+      });
+
       currentSongId = null;
       renderSongList();
       showStatus("🆕 Started a new song — build it, then hit Save!");
@@ -781,6 +793,15 @@
         document.querySelectorAll("#volumeRow .speed-btn").forEach(function (b) { b.classList.remove("active"); });
         btn.classList.add("active");
         masterVolumeMult = parseFloat(btn.getAttribute("data-vol"));
+      });
+    });
+
+    var currentInstrument = "sine";
+    document.querySelectorAll("#instrumentRow .speed-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.querySelectorAll("#instrumentRow .speed-btn").forEach(function (b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        currentInstrument = btn.getAttribute("data-instrument");
       });
     });
 
@@ -856,6 +877,11 @@
       masterVolumeMult = typeof song.masterVolumeMult === "number" ? song.masterVolumeMult : 1;
       document.querySelectorAll("#volumeRow .speed-btn").forEach(function (b) {
         b.classList.toggle("active", parseFloat(b.getAttribute("data-vol")) === masterVolumeMult);
+      });
+
+      currentInstrument = song.instrument || "sine";
+      document.querySelectorAll("#instrumentRow .speed-btn").forEach(function (b) {
+        b.classList.toggle("active", b.getAttribute("data-instrument") === currentInstrument);
       });
     }
 
@@ -999,7 +1025,8 @@
           return part.map(function (row) { return row.slice(); });
         }),
         msPerStep: msPerStep,
-        masterVolumeMult: masterVolumeMult
+        masterVolumeMult: masterVolumeMult,
+        instrument: currentInstrument
       };
       songs.push(newSong);
       saveAllSongs(songs);
