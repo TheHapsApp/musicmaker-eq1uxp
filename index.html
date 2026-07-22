@@ -425,6 +425,7 @@
       <button class="instrument-btn" data-instrument="ebass">🎸 Electric Bass</button>
       <button class="instrument-btn" data-instrument="epiano">🎹 Electric Piano</button>
       <button class="instrument-btn" data-instrument="drums">🥁 Drums</button>
+      <button class="instrument-btn" data-instrument="orchestra">🎼 Orchestra (everything at once!)</button>
     </div>
   </div>
 
@@ -787,48 +788,63 @@
       noise.stop(now + hitLength + 0.05);
     }
 
+    function synthesizeInstrument(key, freq, duration, peak, now) {
+      var recipe = INSTRUMENT_RECIPES[key];
+      if (!recipe) return;
+
+      if (recipe.noise) {
+        playDrumHit(freq, duration, peak, now);
+        return;
+      }
+
+      var master = audioCtx.createGain();
+      var attack = Math.min(recipe.attack, duration * 0.4);
+      master.gain.setValueAtTime(0.0001, now);
+      master.gain.linearRampToValueAtTime(peak, now + attack);
+      master.gain.setValueAtTime(peak, now + Math.max(attack, duration * recipe.hold));
+      master.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+      if (recipe.filterMult) {
+        var filter = audioCtx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.value = Math.min(freq * recipe.filterMult, 16000);
+        filter.Q.value = 0.7;
+        master.connect(filter);
+        filter.connect(audioCtx.destination);
+      } else {
+        master.connect(audioCtx.destination);
+      }
+
+      recipe.layers.forEach(function (layer) {
+        var o = audioCtx.createOscillator();
+        var lg = audioCtx.createGain();
+        o.type = layer.type;
+        o.frequency.value = freq * (layer.freqMult || 1);
+        if (layer.detune) o.detune.value = layer.detune;
+        lg.gain.value = layer.gain;
+        o.connect(lg);
+        lg.connect(master);
+        o.start(now);
+        o.stop(now + duration + 0.05);
+      });
+    }
+
     function playTone(freq, duration, gain) {
       try {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        var recipe = INSTRUMENT_RECIPES[currentInstrument] || INSTRUMENT_RECIPES.sine;
         var peak = typeof gain === "number" ? gain : 0.2;
         var now = audioCtx.currentTime;
 
-        if (recipe.noise) {
-          playDrumHit(freq, duration, peak, now);
+        if (currentInstrument === "orchestra") {
+          // Play every instrument at once, each turned down so the mix doesn't blow out.
+          Object.keys(INSTRUMENT_RECIPES).forEach(function (key) {
+            synthesizeInstrument(key, freq, duration, peak / 4, now);
+          });
           return;
         }
 
-        var master = audioCtx.createGain();
-        var attack = Math.min(recipe.attack, duration * 0.4);
-        master.gain.setValueAtTime(0.0001, now);
-        master.gain.linearRampToValueAtTime(peak, now + attack);
-        master.gain.setValueAtTime(peak, now + Math.max(attack, duration * recipe.hold));
-        master.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-
-        if (recipe.filterMult) {
-          var filter = audioCtx.createBiquadFilter();
-          filter.type = "lowpass";
-          filter.frequency.value = Math.min(freq * recipe.filterMult, 16000);
-          filter.Q.value = 0.7;
-          master.connect(filter);
-          filter.connect(audioCtx.destination);
-        } else {
-          master.connect(audioCtx.destination);
-        }
-
-        recipe.layers.forEach(function (layer) {
-          var o = audioCtx.createOscillator();
-          var lg = audioCtx.createGain();
-          o.type = layer.type;
-          o.frequency.value = freq * (layer.freqMult || 1);
-          if (layer.detune) o.detune.value = layer.detune;
-          lg.gain.value = layer.gain;
-          o.connect(lg);
-          lg.connect(master);
-          o.start(now);
-          o.stop(now + duration + 0.05);
-        });
+        var key = INSTRUMENT_RECIPES[currentInstrument] ? currentInstrument : "sine";
+        synthesizeInstrument(key, freq, duration, peak, now);
       } catch (e) {}
     }
 
