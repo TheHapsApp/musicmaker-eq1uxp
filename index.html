@@ -368,10 +368,15 @@
     <button class="ctrl-btn" id="newSongBtn">🆕 New Song</button>
     <button class="ctrl-btn" id="saveBtn">💾 Save</button>
     <button class="ctrl-btn" id="clearBtn">🔄 Clear</button>
-    <div class="speed-row">
+    <div class="speed-row" id="speedRow">
       <button class="speed-btn" data-speed="400">🐢 Slow</button>
       <button class="speed-btn active" data-speed="250">🚶 Normal</button>
       <button class="speed-btn" data-speed="150">🐇 Fast</button>
+    </div>
+    <div class="speed-row" id="volumeRow">
+      <button class="speed-btn" data-vol="0.5">🔈 Quiet</button>
+      <button class="speed-btn active" data-vol="1">🔉 Normal</button>
+      <button class="speed-btn" data-vol="1.6">🔊 Loud</button>
     </div>
   </div>
 
@@ -503,7 +508,7 @@
             grid[row][step] = level;
             btn.classList.toggle("active", level > 0);
             updateVolClass(btn, level);
-            if (level > 0) playTone(NOTES[row].freq, 0.2, VOLUME_LEVELS[level - 1].gain);
+            if (level > 0) playTone(NOTES[row].freq, 0.2, VOLUME_LEVELS[level - 1].gain * masterVolumeMult);
           });
         })(row, step, btn);
 
@@ -633,7 +638,7 @@
       for (var row = 0; row < NOTES.length; row++) {
         cellButtons[row][currentStep].classList.add("playhead");
         var level = grid[row][currentStep];
-        if (level > 0) playTone(NOTES[row].freq, 0.35, VOLUME_LEVELS[level - 1].gain);
+        if (level > 0) playTone(NOTES[row].freq, 0.35, VOLUME_LEVELS[level - 1].gain * masterVolumeMult);
       }
     }
 
@@ -678,8 +683,13 @@
       renderPartTabs();
 
       msPerStep = 250;
-      document.querySelectorAll(".speed-btn").forEach(function (b) {
+      document.querySelectorAll("#speedRow .speed-btn").forEach(function (b) {
         b.classList.toggle("active", parseInt(b.getAttribute("data-speed"), 10) === msPerStep);
+      });
+
+      masterVolumeMult = 1;
+      document.querySelectorAll("#volumeRow .speed-btn").forEach(function (b) {
+        b.classList.toggle("active", parseFloat(b.getAttribute("data-vol")) === masterVolumeMult);
       });
 
       currentSongId = null;
@@ -687,15 +697,24 @@
       showStatus("🆕 Started a new song — build it, then hit Save!");
     });
 
-    document.querySelectorAll(".speed-btn").forEach(function (btn) {
+    document.querySelectorAll("#speedRow .speed-btn").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        document.querySelectorAll(".speed-btn").forEach(function (b) { b.classList.remove("active"); });
+        document.querySelectorAll("#speedRow .speed-btn").forEach(function (b) { b.classList.remove("active"); });
         btn.classList.add("active");
         msPerStep = parseInt(btn.getAttribute("data-speed"), 10);
         if (playing) {
           clearInterval(playInterval);
           playInterval = setInterval(advanceStep, msPerStep);
         }
+      });
+    });
+
+    var masterVolumeMult = 1;
+    document.querySelectorAll("#volumeRow .speed-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.querySelectorAll("#volumeRow .speed-btn").forEach(function (b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        masterVolumeMult = parseFloat(btn.getAttribute("data-vol"));
       });
     });
 
@@ -763,10 +782,15 @@
 
       if (song.msPerStep) {
         msPerStep = song.msPerStep;
-        document.querySelectorAll(".speed-btn").forEach(function (b) {
+        document.querySelectorAll("#speedRow .speed-btn").forEach(function (b) {
           b.classList.toggle("active", parseInt(b.getAttribute("data-speed"), 10) === msPerStep);
         });
       }
+
+      masterVolumeMult = typeof song.masterVolumeMult === "number" ? song.masterVolumeMult : 1;
+      document.querySelectorAll("#volumeRow .speed-btn").forEach(function (b) {
+        b.classList.toggle("active", parseFloat(b.getAttribute("data-vol")) === masterVolumeMult);
+      });
     }
 
     function renderSongList() {
@@ -846,7 +870,7 @@
         var cellBtn = cellButtons[volumeTargetRow][volumeTargetStep];
         cellBtn.classList.toggle("active", level > 0);
         updateVolClass(cellBtn, level);
-        if (level > 0) playTone(NOTES[volumeTargetRow].freq, 0.25, VOLUME_LEVELS[level - 1].gain);
+        if (level > 0) playTone(NOTES[volumeTargetRow].freq, 0.25, VOLUME_LEVELS[level - 1].gain * masterVolumeMult);
         closeVolumeModal();
       });
     });
@@ -908,7 +932,8 @@
         parts: parts.map(function (part) {
           return part.map(function (row) { return row.slice(); });
         }),
-        msPerStep: msPerStep
+        msPerStep: msPerStep,
+        masterVolumeMult: masterVolumeMult
       };
       songs.push(newSong);
       saveAllSongs(songs);
