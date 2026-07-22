@@ -252,7 +252,7 @@
     }
     .song-card:active { transform: translateY(2px); }
     .song-card.active { background: rgba(255,255,255,0.5); color: #1a2a5a; }
-    .song-card .song-name { font-weight: bold; font-size: 0.95rem; padding-right: 18px; }
+    .song-card .song-name { font-weight: bold; font-size: 0.95rem; padding: 0 18px; }
     .song-card .song-delete {
       position: absolute;
       top: -8px;
@@ -261,6 +261,23 @@
       height: 24px;
       border-radius: 50%;
       background: #ff3b3b;
+      color: #fff;
+      border: 2px solid #fff;
+      font-size: 0.7rem;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .song-card .song-rename {
+      position: absolute;
+      top: -8px;
+      left: -8px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #3fd0ff;
       color: #fff;
       border: 2px solid #fff;
       font-size: 0.7rem;
@@ -351,7 +368,7 @@
 
   <div class="modal-overlay" id="nameModalOverlay">
     <div class="modal-card">
-      <div class="modal-title">🎵 Name your song!</div>
+      <div class="modal-title" id="nameModalTitle">🎵 Name your song!</div>
       <input class="modal-input" id="nameModalInput" type="text" maxlength="30">
       <div class="modal-btns">
         <button class="modal-btn confirm" id="nameModalSaveBtn">💾 Save</button>
@@ -660,6 +677,15 @@
         nameEl.textContent = "🎵 " + song.name;
         card.appendChild(nameEl);
 
+        var renameBtn = document.createElement("div");
+        renameBtn.className = "song-rename";
+        renameBtn.textContent = "✏️";
+        renameBtn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          openRenameModal(song);
+        });
+        card.appendChild(renameBtn);
+
         var delBtn = document.createElement("div");
         delBtn.className = "song-delete";
         delBtn.textContent = "✖";
@@ -686,10 +712,24 @@
 
     var nameModalOverlay = document.getElementById("nameModalOverlay");
     var nameModalInput = document.getElementById("nameModalInput");
+    var nameModalTitle = document.getElementById("nameModalTitle");
+    var modalMode = "save"; // "save" (creating a new song) or "rename" (renaming one that exists)
+    var renamingSongId = null;
 
     function openNameModal() {
+      modalMode = "save";
+      nameModalTitle.textContent = "🎵 Name your song!";
       var count = loadAllSongs().length;
       nameModalInput.value = "Song " + (count + 1);
+      nameModalOverlay.classList.add("show");
+      setTimeout(function () { nameModalInput.focus(); nameModalInput.select(); }, 50);
+    }
+
+    function openRenameModal(song) {
+      modalMode = "rename";
+      renamingSongId = song.id;
+      nameModalTitle.textContent = "✏️ Rename your song!";
+      nameModalInput.value = song.name;
       nameModalOverlay.classList.add("show");
       setTimeout(function () { nameModalInput.focus(); nameModalInput.select(); }, 50);
     }
@@ -698,8 +738,24 @@
       nameModalOverlay.classList.remove("show");
     }
 
-    function confirmSaveSong() {
-      var name = nameModalInput.value.trim() || ("Song " + (loadAllSongs().length + 1));
+    function confirmNameModal() {
+      var typed = nameModalInput.value.trim();
+
+      if (modalMode === "rename") {
+        if (typed) {
+          var songs = loadAllSongs();
+          for (var i = 0; i < songs.length; i++) {
+            if (songs[i].id === renamingSongId) { songs[i].name = typed; break; }
+          }
+          saveAllSongs(songs);
+          renderSongList();
+          showStatus("✏️ Renamed to \"" + typed + "\"!");
+        }
+        closeNameModal();
+        return;
+      }
+
+      var name = typed || ("Song " + (loadAllSongs().length + 1));
       var songs = loadAllSongs();
       var newSong = {
         id: Date.now(),
@@ -718,13 +774,13 @@
     }
 
     document.getElementById("saveBtn").addEventListener("click", openNameModal);
-    document.getElementById("nameModalSaveBtn").addEventListener("click", confirmSaveSong);
+    document.getElementById("nameModalSaveBtn").addEventListener("click", confirmNameModal);
     document.getElementById("nameModalCancelBtn").addEventListener("click", closeNameModal);
     nameModalOverlay.addEventListener("click", function (e) {
       if (e.target === nameModalOverlay) closeNameModal();
     });
     nameModalInput.addEventListener("keydown", function (e) {
-      if (e.key === "Enter") { e.preventDefault(); confirmSaveSong(); }
+      if (e.key === "Enter") { e.preventDefault(); confirmNameModal(); }
     });
 
     migrateOldSingleSong();
