@@ -90,6 +90,58 @@
     }
     .save-status.show { opacity: 1; }
 
+    /* ---- Song parts ---- */
+    .parts-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      max-width: 700px;
+      margin: 0 auto 16px;
+    }
+    .part-tab {
+      position: relative;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: bold;
+      color: #fff;
+      background: rgba(255,255,255,0.18);
+      border: 3px solid #fff;
+      border-radius: 999px;
+      padding: 8px 18px;
+      cursor: pointer;
+    }
+    .part-tab.active { background: rgba(255,255,255,0.55); color: #1a2a5a; }
+    .part-tab .part-delete {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #ff3b3b;
+      color: #fff;
+      border: 2px solid #fff;
+      font-size: 0.6rem;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .part-add-btn {
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: bold;
+      color: #fff;
+      background: rgba(74,222,128,0.32);
+      border: 3px dashed #fff;
+      border-radius: 999px;
+      padding: 8px 18px;
+      cursor: pointer;
+    }
+    .part-add-btn:active { transform: translateY(2px); }
+
     /* ---- Music chart (note grid) ---- */
     .chart-wrap {
       overflow-x: auto;
@@ -285,6 +337,8 @@
 
   <div class="save-status" id="saveStatus"></div>
 
+  <div class="parts-row" id="partsRow"></div>
+
   <div class="chart-wrap">
     <div class="chart" id="chart"></div>
   </div>
@@ -338,11 +392,19 @@
       "🌈 There are no wrong notes here — everything fits together!",
       "⏱️ Try changing the speed to make your song feel different!",
       "🔁 Loop your favorite part and listen to it a few times in a row!",
-      "🎤 Once you like your song, give it a name in your head!"
+      "🎤 Once you like your song, give it a name in your head!",
+      "🧩 Add a new part to build a longer song, like a verse and a chorus!"
     ];
 
-    // grid[row][step] = true/false
-    var grid = NOTES.map(function () { return new Array(STEPS).fill(false); });
+    function makeEmptyGrid() {
+      return NOTES.map(function () { return new Array(STEPS).fill(false); });
+    }
+
+    // A song is made of one or more "parts" — each its own 16-step grid.
+    // Playback plays every part in order, then loops back to the first.
+    var parts = [makeEmptyGrid()];
+    var currentPartIndex = 0;
+    var grid = parts[currentPartIndex]; // the part currently shown/edited
 
     var chartEl = document.getElementById("chart");
     var cellButtons = []; // cellButtons[row][step]
@@ -374,6 +436,67 @@
       chartEl.appendChild(rowEl);
     });
 
+    // Re-paint the chart's active-cell highlighting to match whatever `grid` now is.
+    function renderChartFromGrid() {
+      for (var row = 0; row < NOTES.length; row++) {
+        for (var step = 0; step < STEPS; step++) {
+          cellButtons[row][step].classList.toggle("active", !!grid[row][step]);
+        }
+      }
+    }
+
+    var partsRow = document.getElementById("partsRow");
+
+    function renderPartTabs() {
+      partsRow.innerHTML = "";
+      parts.forEach(function (part, index) {
+        var tab = document.createElement("button");
+        tab.className = "part-tab" + (index === currentPartIndex ? " active" : "");
+        tab.textContent = "Part " + (index + 1);
+
+        if (parts.length > 1) {
+          var delBtn = document.createElement("span");
+          delBtn.className = "part-delete";
+          delBtn.textContent = "✖";
+          delBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            deletePart(index);
+          });
+          tab.appendChild(delBtn);
+        }
+
+        tab.addEventListener("click", function () { switchToPart(index); });
+        partsRow.appendChild(tab);
+      });
+
+      var addBtn = document.createElement("button");
+      addBtn.className = "part-add-btn";
+      addBtn.textContent = "➕ Add New Part to Song";
+      addBtn.addEventListener("click", addNewPart);
+      partsRow.appendChild(addBtn);
+    }
+
+    function switchToPart(index) {
+      currentPartIndex = index;
+      grid = parts[currentPartIndex];
+      renderChartFromGrid();
+      renderPartTabs();
+    }
+
+    function addNewPart() {
+      parts.push(makeEmptyGrid());
+      switchToPart(parts.length - 1);
+    }
+
+    function deletePart(index) {
+      if (parts.length <= 1) return; // always keep at least one part
+      parts.splice(index, 1);
+      var newIndex = Math.min(index, parts.length - 1);
+      switchToPart(newIndex);
+    }
+
+    renderPartTabs();
+
     var audioCtx = null;
     function playTone(freq, duration) {
       try {
@@ -403,7 +526,14 @@
 
     function advanceStep() {
       clearPlayhead();
-      currentStep = (currentStep + 1) % STEPS;
+      currentStep++;
+      if (currentStep >= STEPS) {
+        currentStep = 0;
+        currentPartIndex = (currentPartIndex + 1) % parts.length;
+        grid = parts[currentPartIndex];
+        renderChartFromGrid();
+        renderPartTabs();
+      }
       for (var row = 0; row < NOTES.length; row++) {
         cellButtons[row][currentStep].classList.add("playhead");
         if (grid[row][currentStep]) playTone(NOTES[row].freq, 0.35);
@@ -495,13 +625,17 @@
     }
 
     function applySongToChart(song) {
-      for (var row = 0; row < NOTES.length; row++) {
-        for (var step = 0; step < STEPS; step++) {
-          var on = !!(song.grid[row] && song.grid[row][step]);
-          grid[row][step] = on;
-          cellButtons[row][step].classList.toggle("active", on);
-        }
-      }
+      // New songs store `parts` (an array of grids). Older saved songs only
+      // have a single `grid` — treat that as a one-part song.
+      var loadedParts = song.parts && song.parts.length ? song.parts : [song.grid];
+      parts = loadedParts.map(function (part) {
+        return part.map(function (row) { return row.slice(); });
+      });
+      currentPartIndex = 0;
+      grid = parts[currentPartIndex];
+      renderChartFromGrid();
+      renderPartTabs();
+
       if (song.msPerStep) {
         msPerStep = song.msPerStep;
         document.querySelectorAll(".speed-btn").forEach(function (b) {
@@ -570,7 +704,9 @@
       var newSong = {
         id: Date.now(),
         name: name,
-        grid: grid.map(function (row) { return row.slice(); }),
+        parts: parts.map(function (part) {
+          return part.map(function (row) { return row.slice(); });
+        }),
         msPerStep: msPerStep
       };
       songs.push(newSong);
