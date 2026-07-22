@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Keep this page off Google so it stays our secret -->
+  <meta name="robots" content="noindex, nofollow">
+  <title>Ben's Music Maker</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%B5%3C/text%3E%3C/svg%3E">
+  <style>
+    :root {
+      --p1: #ff5fa2;
+      --p2: #ffd23f;
+      --p3: #3fd0ff;
+      --p4: #8a5cff;
+      --p5: #4ade80;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; }
+    html, body { height: 100%; }
+    body {
+      font-family: "Comic Sans MS", "Trebuchet MS", system-ui, sans-serif;
+      min-height: 100vh;
+      color: #fff;
+      text-align: center;
+      background: linear-gradient(120deg, var(--p4), var(--p1), var(--p2), var(--p3));
+      background-size: 400% 400%;
+      animation: flow 16s ease infinite;
+      padding: 26px 16px 60px;
+    }
+    @keyframes flow {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    h1 {
+      font-size: clamp(1.7rem, 7vw, 2.6rem);
+      text-shadow: 3px 3px 0 rgba(0,0,0,0.2);
+    }
+    .sub {
+      font-size: clamp(0.9rem, 3.2vw, 1.1rem);
+      margin: 8px 0 22px;
+      text-shadow: 1px 1px 0 rgba(0,0,0,0.15);
+    }
+
+    /* ---- Controls ---- */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+    .ctrl-btn {
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: bold;
+      color: #fff;
+      background: rgba(255,255,255,0.22);
+      border: 3px solid #fff;
+      border-radius: 999px;
+      padding: 10px 20px;
+      cursor: pointer;
+      box-shadow: 0 5px 0 rgba(0,0,0,0.2);
+    }
+    .ctrl-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(0,0,0,0.2); }
+    .ctrl-btn.play { background: rgba(74,222,128,0.4); }
+    .ctrl-btn.playing { background: rgba(255,59,59,0.45); }
+    .speed-row { display: flex; gap: 8px; }
+    .speed-btn {
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: bold;
+      color: #fff;
+      background: rgba(255,255,255,0.16);
+      border: 2px solid #fff;
+      border-radius: 999px;
+      padding: 8px 14px;
+      cursor: pointer;
+    }
+    .speed-btn.active { background: rgba(255,255,255,0.55); color: #1a2a5a; }
+
+    /* ---- Music chart (note grid) ---- */
+    .chart-wrap {
+      overflow-x: auto;
+      max-width: 720px;
+      margin: 0 auto 26px;
+      padding-bottom: 8px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .chart {
+      display: inline-flex;
+      flex-direction: column;
+      gap: 4px;
+      background: rgba(255,255,255,0.12);
+      border: 4px solid #fff;
+      border-radius: 20px;
+      padding: 12px;
+    }
+    .note-row { display: flex; align-items: center; gap: 4px; }
+    .note-label {
+      width: 30px;
+      flex: 0 0 auto;
+      font-size: 0.75rem;
+      font-weight: bold;
+      opacity: 0.85;
+      text-align: right;
+      padding-right: 4px;
+    }
+    .step-btn {
+      width: 26px;
+      height: 26px;
+      flex: 0 0 auto;
+      border-radius: 6px;
+      border: 2px solid rgba(255,255,255,0.5);
+      background: rgba(255,255,255,0.12);
+      cursor: pointer;
+      padding: 0;
+    }
+    .step-btn:nth-child(4n+1) { border-left: 3px solid rgba(255,255,255,0.8); }
+    .step-btn.active { border-color: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.6); }
+    .step-btn.playhead { outline: 3px solid #fff; outline-offset: 1px; }
+
+    /* Color-code each note letter, consistent top-to-bottom */
+    .note-C .step-btn.active { background: var(--p1); }
+    .note-D .step-btn.active { background: var(--p2); }
+    .note-E .step-btn.active { background: var(--p3); }
+    .note-G .step-btn.active { background: var(--p4); }
+    .note-A .step-btn.active { background: var(--p5); }
+
+    /* ---- Tips card ---- */
+    .tips-card {
+      max-width: 420px;
+      margin: 0 auto;
+      background: rgba(255,255,255,0.22);
+      border: 4px solid #fff;
+      border-radius: 26px;
+      padding: 20px 22px;
+      box-shadow: 0 8px 0 rgba(0,0,0,0.2);
+    }
+    .tips-title {
+      font-size: 1.1rem;
+      font-weight: bold;
+      margin-bottom: 10px;
+      text-shadow: 1px 1px 0 rgba(0,0,0,0.2);
+    }
+    .tip-text {
+      font-size: 1rem;
+      min-height: 3.2em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+    .tip-next-btn {
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: bold;
+      color: #fff;
+      background: rgba(255,255,255,0.24);
+      border: 3px solid #fff;
+      border-radius: 999px;
+      padding: 8px 20px;
+      cursor: pointer;
+    }
+    .tip-next-btn:active { transform: translateY(2px); }
+  </style>
+</head>
+<body>
+  <h1>🎵 Ben's Music Maker 🎵</h1>
+  <p class="sub">Tap boxes to add notes, then hit Play!</p>
+
+  <div class="controls">
+    <button class="ctrl-btn play" id="playBtn">▶️ Play</button>
+    <button class="ctrl-btn" id="clearBtn">🔄 Clear</button>
+    <div class="speed-row">
+      <button class="speed-btn" data-speed="400">🐢 Slow</button>
+      <button class="speed-btn active" data-speed="250">🚶 Normal</button>
+      <button class="speed-btn" data-speed="150">🐇 Fast</button>
+    </div>
+  </div>
+
+  <div class="chart-wrap">
+    <div class="chart" id="chart"></div>
+  </div>
+
+  <div class="tips-card">
+    <div class="tips-title">💡 Music Tip</div>
+    <div class="tip-text" id="tipText">Tap "Next Tip" for an idea!</div>
+    <button class="tip-next-btn" id="tipNextBtn">➡️ Next Tip</button>
+  </div>
+
+  <script>
+    // Two octaves of a C major pentatonic scale — every note sounds good together!
+    var NOTES = [
+      { letter: "A", label: "A5", freq: 880.00 },
+      { letter: "G", label: "G5", freq: 783.99 },
+      { letter: "E", label: "E5", freq: 659.25 },
+      { letter: "D", label: "D5", freq: 587.33 },
+      { letter: "C", label: "C5", freq: 523.25 },
+      { letter: "A", label: "A4", freq: 440.00 },
+      { letter: "G", label: "G4", freq: 392.00 },
+      { letter: "E", label: "E4", freq: 329.63 },
+      { letter: "D", label: "D4", freq: 293.66 },
+      { letter: "C", label: "C4", freq: 261.63 }
+    ];
+    var STEPS = 16;
+
+    var TIPS = [
+      "🎶 Try starting and ending your song on the same note — it feels complete!",
+      "🥁 A steady beat helps people want to dance or clap along!",
+      "🎵 Leaving some empty spaces is music too — silence counts!",
+      "🎼 Try repeating a little pattern 2 or 3 times to make it catchy!",
+      "🎹 Mixing high notes and low notes makes your song more interesting!",
+      "🔊 Try putting some notes close together and some far apart!",
+      "🌈 There are no wrong notes here — everything fits together!",
+      "⏱️ Try changing the speed to make your song feel different!",
+      "🔁 Loop your favorite part and listen to it a few times in a row!",
+      "🎤 Once you like your song, give it a name in your head!"
+    ];
+
+    // grid[row][step] = true/false
+    var grid = NOTES.map(function () { return new Array(STEPS).fill(false); });
+
+    var chartEl = document.getElementById("chart");
+    var cellButtons = []; // cellButtons[row][step]
+
+    NOTES.forEach(function (note, row) {
+      var rowEl = document.createElement("div");
+      rowEl.className = "note-row note-" + note.letter;
+
+      var label = document.createElement("span");
+      label.className = "note-label";
+      label.textContent = note.label;
+      rowEl.appendChild(label);
+
+      var rowButtons = [];
+      for (var step = 0; step < STEPS; step++) {
+        var btn = document.createElement("button");
+        btn.className = "step-btn";
+        btn.addEventListener("click", (function (row, step, btn) {
+          return function () {
+            grid[row][step] = !grid[row][step];
+            btn.classList.toggle("active", grid[row][step]);
+            if (grid[row][step]) playTone(NOTES[row].freq, 0.2);
+          };
+        })(row, step, btn));
+        rowEl.appendChild(btn);
+        rowButtons.push(btn);
+      }
+      cellButtons.push(rowButtons);
+      chartEl.appendChild(rowEl);
+    });
+
+    var audioCtx = null;
+    function playTone(freq, duration) {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = "sine";
+        o.frequency.value = freq;
+        g.gain.value = 0.2;
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start();
+        g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        o.stop(audioCtx.currentTime + duration);
+      } catch (e) {}
+    }
+
+    var playBtn = document.getElementById("playBtn");
+    var playInterval = null;
+    var currentStep = -1;
+    var msPerStep = 250;
+    var playing = false;
+
+    function clearPlayhead() {
+      cellButtons.forEach(function (rowButtons) {
+        rowButtons.forEach(function (btn) { btn.classList.remove("playhead"); });
+      });
+    }
+
+    function advanceStep() {
+      clearPlayhead();
+      currentStep = (currentStep + 1) % STEPS;
+      for (var row = 0; row < NOTES.length; row++) {
+        cellButtons[row][currentStep].classList.add("playhead");
+        if (grid[row][currentStep]) playTone(NOTES[row].freq, 0.35);
+      }
+    }
+
+    function startPlaying() {
+      playing = true;
+      playBtn.textContent = "⏹️ Stop";
+      playBtn.classList.add("playing");
+      currentStep = -1;
+      advanceStep();
+      playInterval = setInterval(advanceStep, msPerStep);
+    }
+
+    function stopPlaying() {
+      playing = false;
+      playBtn.textContent = "▶️ Play";
+      playBtn.classList.remove("playing");
+      clearInterval(playInterval);
+      clearPlayhead();
+    }
+
+    playBtn.addEventListener("click", function () {
+      if (playing) stopPlaying(); else startPlaying();
+    });
+
+    document.getElementById("clearBtn").addEventListener("click", function () {
+      stopPlaying();
+      grid.forEach(function (row) { row.fill(false); });
+      cellButtons.forEach(function (rowButtons) {
+        rowButtons.forEach(function (btn) { btn.classList.remove("active"); });
+      });
+    });
+
+    document.querySelectorAll(".speed-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.querySelectorAll(".speed-btn").forEach(function (b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        msPerStep = parseInt(btn.getAttribute("data-speed"), 10);
+        if (playing) {
+          clearInterval(playInterval);
+          playInterval = setInterval(advanceStep, msPerStep);
+        }
+      });
+    });
+
+    var tipIndex = -1;
+    document.getElementById("tipNextBtn").addEventListener("click", function () {
+      var next;
+      do { next = Math.floor(Math.random() * TIPS.length); } while (next === tipIndex && TIPS.length > 1);
+      tipIndex = next;
+      document.getElementById("tipText").textContent = TIPS[tipIndex];
+    });
+  </script>
+</body>
+</html>
